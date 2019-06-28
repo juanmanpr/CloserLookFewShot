@@ -120,7 +120,10 @@ if __name__ == '__main__':
             else:
                 image_size = 84 
         else:
-            image_size = 224
+            if params.model == 'ResNet12_NF':
+                image_size = 84
+            else:
+                image_size = 224
 
         datamgr         = SetDataManager(image_size, n_eposide = iter_num, n_query = 15 , **few_shot_params)
         

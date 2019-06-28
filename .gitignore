@@ -1,0 +1,16 @@
+SAVE_DIR/*
+*.tar.gz
+*.tgz
+*.zip
+*test.txt
+*train.txt
+filelists/CUB/CUB_200_2011/*
+filelists/CUB/*.txt
+filelists/miniImagenet/*.csv*
+filelists/omniglot/*.txt
+filelists/omniglot/images/*
+filelists/CUB/*.json
+filelists/miniImagenet/*.json
+filelists/omniglot/*.json
+*__pycache__*
+record/

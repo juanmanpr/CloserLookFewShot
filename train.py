@@ -69,7 +69,10 @@ if __name__=='__main__':
         else:
             image_size = 84
     else:
-        image_size = 224
+        if params.model == 'ResNet12_NF':
+            image_size = 84
+        else:
+            image_size = 224
 
     if params.dataset in ['omniglot', 'cross_char']:
         assert params.model == 'Conv4' and not params.train_aug ,'omniglot only support Conv4 without augmentation'
@@ -110,7 +113,7 @@ if __name__=='__main__':
         if params.method == 'baseline':
             model           = BaselineTrain( model_dict[params.model], params.num_classes)
         elif params.method == 'baseline++':
-            model           = BaselineTrain( model_dict[params.model], params.num_classes, loss_type = 'dist')
+            model           = BaselineTrain( model_dict[params.model], params.num_classes, loss_type = 'dist', init_orthogonal = params.ortho)
 
     elif params.method in ['protonet','matchingnet','relationnet', 'relationnet_softmax', 'maml', 'maml_approx']:
         n_query = max(1, int(16* params.test_n_way/params.train_n_way)) #if test_n_way is smaller than train_n_way, reduce n_query to keep batch size small
@@ -155,7 +158,7 @@ if __name__=='__main__':
 
     model = model.cuda()
 
-    params.checkpoint_dir = '%s/checkpoints/%s/%s_%s' %(configs.save_dir, params.dataset, params.model, params.method)
+    params.checkpoint_dir = '%s/checkpoints/%s/%s_%s%s' %(configs.save_dir, params.dataset, params.model, params.method, '_orthoinit' if params.ortho else '')
     if params.train_aug:
         params.checkpoint_dir += '_aug'
     if not params.method  in ['baseline', 'baseline++']: 

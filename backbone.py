@@ -8,6 +8,27 @@ import numpy as np
 import torch.nn.functional as F
 from torch.nn.utils.weight_norm import WeightNorm
 
+from others.ResNet12_embedding import resnet12
+
+import numpy as np
+import math
+from scipy.linalg import toeplitz
+from numpy import linalg as LA
+
+def generate_orthogonal_rows_matrix(num_rows, feat_dim):
+    # random orthogonal vector by computing eigenvectors of a random square matrix
+    print('Generating orthogonal initialization')
+    # We want to force a positive-definite matrix
+    matrix_p = np.random.rand(feat_dim,feat_dim)
+    matrix_p = (matrix_p + np.transpose(matrix_p))/2 + feat_dim*np.eye(feat_dim)
+
+    # get the subset of its eigenvectors
+    eigen_vals, eigen_vecs = LA.eig(matrix_p)
+    ortho_mat = eigen_vecs[:num_rows,:]
+    
+    # verify orthogonality by checking np.matmul(w,np.transpose(w)) is (almost) identity
+    return ortho_mat
+    
 # Basic ResNet model
 
 def init_layer(L):
@@ -20,10 +41,14 @@ def init_layer(L):
         L.bias.data.fill_(0)
 
 class distLinear(nn.Module):
-    def __init__(self, indim, outdim):
+    def __init__(self, indim, outdim, init_orthogonal = False):
         super(distLinear, self).__init__()
         self.L = nn.Linear( indim, outdim, bias = False)
         self.class_wise_learnable_norm = True  #See the issue#4&8 in the github 
+        
+        if init_orthogonal:
+            self.L.weight.data = torch.from_numpy(generate_orthogonal_rows_matrix(outdim, indim))        
+        
         if self.class_wise_learnable_norm:      
             WeightNorm.apply(self.L, 'weight', dim=0) #split the weight update component to direction and norm      
 
@@ -184,6 +209,66 @@ class SimpleBlock(nn.Module):
         out = self.relu2(out)
         return out
 
+# Simple ResNet Block 3
+class SimpleBlock3(nn.Module):
+    maml = False #Default
+    def __init__(self, indim, outdim, half_res):
+        super(SimpleBlock3, self).__init__()
+        self.indim = indim
+        self.outdim = outdim
+        if self.maml:
+            self.C1 = Conv2d_fw(indim, outdim, kernel_size=3, stride=2 if half_res else 1, padding=1, bias=False)
+            self.BN1 = BatchNorm2d_fw(outdim)
+            self.C2 = Conv2d_fw(outdim, outdim,kernel_size=3, padding=1,bias=False)
+            self.BN2 = BatchNorm2d_fw(outdim)
+            self.C3 = Conv2d_fw(outdim, outdim,kernel_size=3, padding=1,bias=False)
+            self.BN3 = BatchNorm2d_fw(outdim)            
+        else:
+            self.C1 = nn.Conv2d(indim, outdim, kernel_size=3, stride=2 if half_res else 1, padding=1, bias=False)
+            self.BN1 = nn.BatchNorm2d(outdim)
+            self.C2 = nn.Conv2d(outdim, outdim,kernel_size=3, padding=1,bias=False)
+            self.BN2 = nn.BatchNorm2d(outdim)
+            self.C3 = nn.Conv2d(outdim, outdim,kernel_size=3, padding=1,bias=False)
+            self.BN3 = nn.BatchNorm2d(outdim)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.relu2 = nn.ReLU(inplace=True)
+        self.relu3 = nn.ReLU(inplace=True)
+
+        self.parametrized_layers = [self.C1, self.C2, self.C3, self.BN1, self.BN2, self.BN3]
+
+        self.half_res = half_res
+
+        # if the input number of channels is not equal to the output, then need a 1x1 convolution
+        if indim!=outdim:
+            if self.maml:
+                self.shortcut = Conv2d_fw(indim, outdim, 1, 2 if half_res else 1, bias=False)
+                self.BNshortcut = BatchNorm2d_fw(outdim)
+            else:
+                self.shortcut = nn.Conv2d(indim, outdim, 1, 2 if half_res else 1, bias=False)
+                self.BNshortcut = nn.BatchNorm2d(outdim)
+
+            self.parametrized_layers.append(self.shortcut)
+            self.parametrized_layers.append(self.BNshortcut)
+            self.shortcut_type = '1x1'
+        else:
+            self.shortcut_type = 'identity'
+
+        for layer in self.parametrized_layers:
+            init_layer(layer)
+
+    def forward(self, x):
+        out = self.C1(x)
+        out = self.BN1(out)
+        out = self.relu1(out)
+        out = self.C2(out)
+        out = self.BN2(out)
+        out = self.relu2(out)        
+        out = self.C3(out)
+        out = self.BN3(out)        
+        short_out = x if self.shortcut_type == 'identity' else self.BNshortcut(self.shortcut(x))
+        out = out + short_out
+        out = self.relu3(out)
+        return out
 
 
 # Bottleneck block
@@ -323,12 +408,12 @@ class ConvNetSNopool(nn.Module): #Relation net use a 4 layer conv with pooling i
         out = self.trunk(out)
         return out
 
-class ResNet(nn.Module):
+class ResNetSS(nn.Module):
     maml = False #Default
-    def __init__(self,block,list_of_num_layers, list_of_out_dims, flatten = True):
+    def __init__(self,block,list_of_num_layers, list_of_out_dims, flatten = True, spatial_size=7):
         # list_of_num_layers specifies number of layers in each stage
         # list_of_out_dims specifies number of output channel for each stage
-        super(ResNet,self).__init__()
+        super(ResNetSS,self).__init__()
         assert len(list_of_num_layers)==4, 'Can have only four stages'
         if self.maml:
             conv1 = Conv2d_fw(3, 64, kernel_size=7, stride=2, padding=3,
@@ -363,14 +448,17 @@ class ResNet(nn.Module):
             trunk.append(Flatten())
             self.final_feat_dim = indim
         else:
-            self.final_feat_dim = [ indim, 7, 7]
+            self.final_feat_dim = [ indim, spatial_size, spatial_size]
 
         self.trunk = nn.Sequential(*trunk)
 
     def forward(self,x):
+        #print(10*'-')
+        #print(x.size())
         out = self.trunk(x)
+        #print(out.size())
         return out
-
+        
 def Conv4():
     return ConvNet(4)
 
@@ -390,19 +478,25 @@ def Conv4SNP():
     return ConvNetSNopool(4)
 
 def ResNet10( flatten = True):
-    return ResNet(SimpleBlock, [1,1,1,1],[64,128,256,512], flatten)
+    return ResNetSS(SimpleBlock, [1,1,1,1],[64,128,256,512], flatten, 7)
+
+def ResNet12_NF( flatten = True ):
+    return resnet12(avg_pool=False, drop_rate=0.1, dropblock_size=5)
 
 def ResNet18( flatten = True):
-    return ResNet(SimpleBlock, [2,2,2,2],[64,128,256,512], flatten)
+    return ResNetSS(SimpleBlock, [2,2,2,2],[64,128,256,512], flatten, 7)
+
+def ResNet18_NF( flatten = False):
+    return ResNetSS(SimpleBlock, [2,2,2,2],[64,128,256,512], flatten, 7)
 
 def ResNet34( flatten = True):
-    return ResNet(SimpleBlock, [3,4,6,3],[64,128,256,512], flatten)
+    return ResNetSS(SimpleBlock, [3,4,6,3],[64,128,256,512], flatten, 7)
 
 def ResNet50( flatten = True):
-    return ResNet(BottleneckBlock, [3,4,6,3], [256,512,1024,2048], flatten)
+    return ResNetSS(BottleneckBlock, [3,4,6,3], [256,512,1024,2048], flatten, 7)
 
 def ResNet101( flatten = True):
-    return ResNet(BottleneckBlock, [3,4,23,3],[256,512,1024,2048], flatten)
+    return ResNetSS(BottleneckBlock, [3,4,23,3],[256,512,1024,2048], flatten, 7)
 
 
 

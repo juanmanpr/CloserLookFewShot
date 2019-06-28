@@ -50,7 +50,10 @@ if __name__ == '__main__':
         else:
             image_size = 84 
     else:
-        image_size = 224
+        if params.model == 'ResNet12_NF':
+            image_size = 84
+        else:
+            image_size = 224
 
     if params.dataset in ['omniglot', 'cross_char']:
         assert params.model == 'Conv4' and not params.train_aug ,'omniglot only support Conv4 without augmentation'

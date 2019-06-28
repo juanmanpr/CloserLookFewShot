@@ -7,7 +7,7 @@ import random
 import re
 
 cwd = os.getcwd() 
-data_path = join(cwd,'ILSVRC2015/Data/CLS-LOC/train')
+data_path = join(cwd,'/home/SERILOCAL/j.perez-rua/Documents/Data/ImageNet/train256x256')
 savedir = './'
 dataset_list = ['base', 'val', 'novel']
 
