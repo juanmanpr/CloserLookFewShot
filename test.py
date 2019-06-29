@@ -91,7 +91,7 @@ if __name__ == '__main__':
 
     model = model.cuda()
 
-    checkpoint_dir = '%s/checkpoints/%s/%s_%s' %(configs.save_dir, params.dataset, params.model, params.method)
+    checkpoint_dir = '%s/checkpoints/%s/%s_%s%s' %(configs.save_dir, params.dataset, params.model, params.method, '_orthoinit' if params.ortho else '')
     if params.train_aug:
         checkpoint_dir += '_aug'
     if not params.method in ['baseline', 'baseline++'] :
