@@ -35,7 +35,7 @@ class BaselineTrain(nn.Module):
         y = y.to(self.device)
         
         if self.ortho:
-            if loss_type == 'dist': #Baseline ++
+            if self.loss_type == 'dist': #Baseline ++
                 self.oloss =  l2_reg_ortho(self.classifier.L.weight, self.device)
             else:
                 self.oloss =  l2_reg_ortho(self.classifier.weight, self.device)
