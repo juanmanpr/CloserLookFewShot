@@ -58,9 +58,9 @@ if __name__ == '__main__':
         params.model = 'Conv4S'
 
     if params.method == 'baseline':
-        model           = BaselineFinetune( model_dict[params.model], **few_shot_params )
+        model           = BaselineFinetune( model_dict[params.model], init_orthogonal = params.ortho, ortho_reg = params.ortho_reg, device=device, **few_shot_params )
     elif params.method == 'baseline++':
-        model           = BaselineFinetune( model_dict[params.model], loss_type = 'dist', **few_shot_params )
+        model           = BaselineFinetune( model_dict[params.model], loss_type = 'dist', init_orthogonal = params.ortho, ortho_reg = params.ortho_reg, device=device, **few_shot_params )
     elif params.method == 'protonet':
         model           = ProtoNet( model_dict[params.model], **few_shot_params )
     elif params.method == 'matchingnet':
