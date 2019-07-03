@@ -86,6 +86,8 @@ if __name__=='__main__':
                 params.stop_epoch = 5
             elif params.dataset in ['CUB']:
                 params.stop_epoch = 200 # This is different as stated in the open-review paper. However, using 400 epoch in baseline actually lead to over-fitting
+            elif params.ortho:
+                params.stop_epoch = 200               
             elif params.dataset in ['miniImagenet', 'cross']:
                 params.stop_epoch = 400
             else:
@@ -98,7 +100,9 @@ if __name__=='__main__':
             else:
                 params.stop_epoch = 600 #default
      
-
+    print('Running up to {} epochs'.format(params.stop_epoch))
+    device = torch.device("cuda:0" if torch.cuda.device_count() > 0 else "cpu")
+        
     if params.method in ['baseline', 'baseline++'] :
         base_datamgr    = SimpleDataManager(image_size, batch_size = 16)
         base_loader     = base_datamgr.get_data_loader( base_file , aug = params.train_aug )
@@ -111,9 +115,10 @@ if __name__=='__main__':
             assert params.num_classes >= 1597, 'class number need to be larger than max label id in base class'
 
         if params.method == 'baseline':
-            model           = BaselineTrain( model_dict[params.model], params.num_classes)
+            model           = BaselineTrain( model_dict[params.model], params.num_classes, device=device)
         elif params.method == 'baseline++':
-            model           = BaselineTrain( model_dict[params.model], params.num_classes, loss_type = 'dist', init_orthogonal = params.ortho)
+            model           = BaselineTrain( model_dict[params.model], params.num_classes, 
+                loss_type = 'dist', init_orthogonal = params.ortho, ortho_reg = params.ortho_reg, device=device)
 
     elif params.method in ['protonet','matchingnet','relationnet', 'relationnet_softmax', 'maml', 'maml_approx']:
         n_query = max(1, int(16* params.test_n_way/params.train_n_way)) #if test_n_way is smaller than train_n_way, reduce n_query to keep batch size small
@@ -156,9 +161,9 @@ if __name__=='__main__':
     else:
        raise ValueError('Unknown method')
 
-    model = model.cuda()
+    model = model.to(device)
 
-    params.checkpoint_dir = '%s/checkpoints/%s/%s_%s%s' %(configs.save_dir, params.dataset, params.model, params.method, '_orthoinit' if params.ortho else '')
+    params.checkpoint_dir = '%s/checkpoints/%s/%s_%s%s%s' %(configs.save_dir, params.dataset, params.model, params.method, '_orthoinit' if params.ortho else '', '_orthoreg' if params.ortho_reg else '')
     
     if params.train_aug:
         params.checkpoint_dir += '_aug'

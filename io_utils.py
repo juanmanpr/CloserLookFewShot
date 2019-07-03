@@ -9,7 +9,6 @@ model_dict = dict(
             Conv4S = backbone.Conv4S,
             Conv6 = backbone.Conv6,
             ResNet10 = backbone.ResNet10,
-            ResNet12_NF = backbone.ResNet12_NF,
             ResNet18 = backbone.ResNet18,
             ResNet18_NF = backbone.ResNet18_NF,
             ResNet34 = backbone.ResNet34,
@@ -26,6 +25,7 @@ def parse_args(script):
     parser.add_argument('--n_shot'      , default=5, type=int,  help='number of labeled data in each class, same as n_support') #baseline and baseline++ only use this parameter in finetuning
     parser.add_argument('--train_aug'   , action='store_true',  help='perform data augmentation or not during training ') #still required for save_features.py and test.py to find the model path correctly
     parser.add_argument('--ortho'       , action='store_true', help='orthogonal initialization') 
+    parser.add_argument('--ortho_reg'   , action='store_true', help='orthogonal regularization') 
 
     if script == 'train':
         parser.add_argument('--num_classes' , default=200, type=int, help='total number of classes in softmax, only used in baseline') #make it larger than the maximum label value in base class
